@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Box, Button, Paper, Typography, List, ListItem, ListItemButton, ListItemText, Alert } from '@mui/material';
+import { Box, Button, Paper, Typography, List, ListItem, ListItemButton, ListItemText, Alert, useTheme } from '@mui/material';
 import TextField from '@mui/material/TextField';
 import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
@@ -43,6 +43,8 @@ function getSuggestions(input: string, coins: CoinInfo[], max = 5) {
 }
 
 const CryptoGraph: React.FC = () => {
+  const theme = useTheme();
+  const isDarkMode = theme.palette.mode === 'dark';
   const [startDate, setStartDate] = useState<Date | null>(null);
   const [endDate, setEndDate] = useState<Date | null>(null);
   const [cryptoName, setCryptoName] = useState('');
@@ -101,70 +103,135 @@ const CryptoGraph: React.FC = () => {
     const prices = graphData.prices;
     const width = 800;
     const height = 400;
-    const padding = 60;
-    const xScale = (width - 2 * padding) / (prices.length - 1);
+    const padding = { top: 40, right: 150, bottom: 40, left: 40 };
+    
+    const xScale = (width - padding.left - padding.right) / (prices.length - 1);
     const yMin = Math.min(...prices.map((p) => p[1]));
     const yMax = Math.max(...prices.map((p) => p[1]));
-    const yScale = (height - 2 * padding) / (yMax - yMin);
-    const points = prices
-      .map((price, i) => {
-        const x = padding + i * xScale;
-        const y = height - padding - (price[1] - yMin) * yScale;
-        return `${x},${y}`;
-      })
-      .join(' ');
-    // Y-axis ticks (5 ticks)
-    const yTicks = 5;
-    const yTickVals = Array.from({ length: yTicks }, (_, i) => yMin + ((yMax - yMin) * i) / (yTicks - 1));
-    // X-axis ticks (5 ticks)
-    const xTicks = 5;
-    const xTickIdxs = Array.from({ length: xTicks }, (_, i) => Math.round(i * (prices.length - 1) / (xTicks - 1)));
+    const yScale = (height - padding.top - padding.bottom) / (yMax - yMin);
+    
+    // Generate points array
+    const points = prices.map((price, i) => ({
+      x: padding.left + i * xScale,
+      y: height - padding.bottom - (price[1] - yMin) * yScale
+    }));
+
+    // Create a smooth curve using cubic Bezier curves
+    const createSmoothPath = (points: {x: number, y: number}[]): string => {
+      if (points.length < 2) return '';
+      
+      // Start with the first point
+      let path = `M ${points[0].x} ${points[0].y}`;
+      
+      // Tension controls how "tight" the curve is (0.2 gives a gentle curve)
+      const tension = 0.2;
+      
+      for (let i = 0; i < points.length - 1; i++) {
+        const p0 = i > 0 ? points[i - 1] : points[0];
+        const p1 = points[i];
+        const p2 = points[i + 1];
+        const p3 = i < points.length - 2 ? points[i + 2] : p2;
+        
+        // Calculate control points
+        const cp1x = p1.x + (p2.x - p0.x) * tension;
+        const cp1y = p1.y + (p2.y - p0.y) * tension;
+        const cp2x = p2.x - (p3.x - p1.x) * tension;
+        const cp2y = p2.y - (p3.y - p1.y) * tension;
+        
+        // Add cubic Bezier curve
+        path += ` C ${cp1x} ${cp1y}, ${cp2x} ${cp2y}, ${p2.x} ${p2.y}`;
+      }
+      
+      return path;
+    };
+
+    const smoothPath = createSmoothPath(points);
+
+    // Theme-aware colors
+    const backgroundColor = isDarkMode ? '#121212' : '#f5f5f5';
+    const textColor = isDarkMode ? 'rgba(255, 255, 255, 0.7)' : 'rgba(0, 0, 0, 0.7)';
+    const gridColor = isDarkMode ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)';
+
+    // Number of vertical grid lines
+    const gridLines = 10;
+    
+    // Format currency for large numbers
+    const formatCurrency = (value: number) => {
+      if (value >= 1000000) {
+        return `$${(value / 1000000).toFixed(2)}M`;
+      } else if (value >= 10000) {
+        return `$${Math.round(value).toLocaleString()}`;
+      } else if (value >= 1) {
+        return `$${value.toFixed(2)}`;
+      } else {
+        return `$${value.toFixed(5)}`;
+      }
+    };
+    
     return (
       <svg
         ref={svgRef}
         width={width}
         height={height}
-        style={{ backgroundColor: 'white' }}
+        style={{ backgroundColor, borderRadius: '8px' }}
       >
-        {/* Y-axis */}
-        <line x1={padding} y1={padding} x2={padding} y2={height - padding} stroke="#888" strokeWidth="2" />
-        {/* X-axis */}
-        <line x1={padding} y1={height - padding} x2={width - padding} y2={height - padding} stroke="#888" strokeWidth="2" />
-        {/* Y-axis ticks and labels */}
-        {yTickVals.map((val, i) => {
-          const y = height - padding - (val - yMin) * yScale;
+        <defs>
+          {/* Gradient for the line */}
+          <linearGradient id="lineGradient" gradientUnits="userSpaceOnUse" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" stopColor="#f44336" /> {/* Red */}
+            <stop offset="25%" stopColor="#ff9800" /> {/* Orange */}
+            <stop offset="50%" stopColor="#cddc39" /> {/* Yellow-green */}
+            <stop offset="75%" stopColor="#8bc34a" /> {/* Green */}
+            <stop offset="100%" stopColor="#bb86fc" /> {/* Purple */}
+          </linearGradient>
+        </defs>
+        
+        {/* Vertical grid lines */}
+        {Array.from({ length: gridLines }).map((_, i) => {
+          const x = padding.left + (width - padding.left - padding.right) * i / (gridLines - 1);
           return (
-            <g key={i}>
-              <line x1={padding - 5} y1={y} x2={padding} y2={y} stroke="#888" />
-              <text x={padding - 10} y={y + 4} textAnchor="end" fontSize="12" fill="#444">
-                {val.toFixed(2)}
-              </text>
-            </g>
+            <line 
+              key={`grid-${i}`}
+              x1={x} 
+              y1={padding.top} 
+              x2={x} 
+              y2={height - padding.bottom} 
+              stroke={gridColor} 
+              strokeWidth="1"
+            />
           );
         })}
-        {/* X-axis ticks and labels */}
-        {xTickIdxs.map((idx, i) => {
-          const x = padding + idx * xScale;
-          const date = new Date(prices[idx][0]);
-          return (
-            <g key={i}>
-              <line x1={x} y1={height - padding} x2={x} y2={height - padding + 5} stroke="#888" />
-              <text x={x} y={height - padding + 20} textAnchor="middle" fontSize="12" fill="#444">
-                {date.toLocaleDateString()}
-              </text>
-            </g>
-          );
-        })}
-        {/* Price line */}
-        <polyline
-          points={points}
+
+        {/* Smooth price line with gradient */}
+        <path
+          d={smoothPath}
           fill="none"
-          stroke="#2196f3"
-          strokeWidth="2"
+          stroke="url(#lineGradient)"
+          strokeWidth="3"
+          strokeLinecap="round"
+          strokeLinejoin="round"
         />
-        {/* Chart title */}
-        <text x={width / 2} y={padding / 2} textAnchor="middle" fontSize="18" fill="#222">
-          {cryptoName.toUpperCase()} Price Chart
+        
+        {/* Min/max labels on right side */}
+        <text 
+          x={width - padding.right + 10} 
+          y={padding.top} 
+          textAnchor="start" 
+          fontSize="14" 
+          fill={textColor}
+          fontWeight="bold"
+        >
+          High: {formatCurrency(yMax)}
+        </text>
+        <text 
+          x={width - padding.right + 10} 
+          y={height - padding.bottom} 
+          textAnchor="start" 
+          fontSize="14" 
+          fill={textColor}
+          fontWeight="bold"
+        >
+          Low: {formatCurrency(yMin)}
         </text>
       </svg>
     );
@@ -172,48 +239,75 @@ const CryptoGraph: React.FC = () => {
 
   return (
     <LocalizationProvider dateAdapter={AdapterDateFns}>
-      <Box sx={{ maxWidth: 900, mx: 'auto', p: 3 }}>
-        <Paper elevation={3} sx={{ p: 3 }}>
-          <Typography variant="h4" gutterBottom>
+      <Box sx={{ maxWidth: 1000, mx: 'auto', p: 3 }}>
+        <Paper 
+          elevation={isDarkMode ? 2 : 1} 
+          sx={{ 
+            p: 4, 
+            borderRadius: 2,
+            bgcolor: theme.palette.mode === 'dark' ? 'rgba(30, 30, 30, 0.9)' : 'rgba(255, 255, 255, 0.9)',
+            backdropFilter: 'blur(10px)'
+          }}
+        >
+          <Typography variant="h4" gutterBottom fontWeight="500" sx={{ mb: 4 }}>
             Crypto Price Chart Generator
           </Typography>
-          <Box sx={{ display: 'flex', gap: 2, mb: 3 }}>
+          
+          <Box sx={{ display: 'flex', gap: 2, mb: 4, flexWrap: 'wrap' }}>
             <TextField
               label="Cryptocurrency Name"
               value={cryptoName}
               onChange={(e) => setCryptoName(e.target.value)}
               placeholder="e.g., bitcoin"
+              size="small"
+              sx={{ minWidth: 200 }}
             />
             <DatePicker
               label="Start Date"
               value={startDate}
               onChange={(newValue) => setStartDate(newValue)}
-              renderInput={(params) => <TextField {...params} />}
+              renderInput={(params) => <TextField {...params} size="small" />}
             />
             <DatePicker
               label="End Date"
               value={endDate}
               onChange={(newValue) => setEndDate(newValue)}
-              renderInput={(params) => <TextField {...params} />}
+              renderInput={(params) => <TextField {...params} size="small" />}
             />
           </Box>
-          <Box sx={{ display: 'flex', gap: 2, mb: 3 }}>
+
+          <Box sx={{ display: 'flex', gap: 2, mb: 4 }}>
             <Button
               variant="contained"
               onClick={fetchCryptoData}
               disabled={!startDate || !endDate || !cryptoName}
+              sx={{ 
+                bgcolor: theme.palette.mode === 'dark' ? '#bb86fc' : '#6200ee',
+                '&:hover': {
+                  bgcolor: theme.palette.mode === 'dark' ? '#a56eff' : '#3700b3',
+                }
+              }}
             >
               Generate Graph
             </Button>
             {graphData && (
-              <Button variant="outlined" onClick={downloadSVG}>
+              <Button 
+                variant="outlined" 
+                onClick={downloadSVG}
+                sx={{ 
+                  borderColor: theme.palette.mode === 'dark' ? '#bb86fc' : '#6200ee',
+                  color: theme.palette.mode === 'dark' ? '#bb86fc' : '#6200ee',
+                }}
+              >
                 Download SVG
               </Button>
             )}
           </Box>
-          {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
+
+          {error && <Alert severity="error" sx={{ mb: 3 }}>{error}</Alert>}
+          
           {suggestions.length > 0 && (
-            <Box sx={{ mb: 2 }}>
+            <Box sx={{ mb: 4 }}>
               <Typography variant="subtitle1">Did you mean:</Typography>
               <List>
                 {suggestions.map((coin) => (
@@ -226,7 +320,8 @@ const CryptoGraph: React.FC = () => {
               </List>
             </Box>
           )}
-          <Box sx={{ display: 'flex', justifyContent: 'center' }}>
+
+          <Box sx={{ display: 'flex', justifyContent: 'center', mb: 2 }}>
             {renderGraph()}
           </Box>
         </Paper>
