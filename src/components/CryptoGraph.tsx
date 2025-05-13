@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Box, Button, Paper, Typography, List, ListItem, ListItemButton, ListItemText, Alert, useTheme } from '@mui/material';
+import { Box, Button, Paper, Typography, List, ListItem, ListItemButton, ListItemText, Alert, useTheme, FormControl, InputLabel, Select, MenuItem } from '@mui/material';
 import TextField from '@mui/material/TextField';
 import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
@@ -52,6 +52,7 @@ const CryptoGraph: React.FC = () => {
   const [allCoins, setAllCoins] = useState<CoinInfo[]>([]);
   const [suggestions, setSuggestions] = useState<CoinInfo[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [gridLineCount, setGridLineCount] = useState<number>(6);
   const svgRef = useRef<SVGSVGElement>(null);
 
   // Fetch all coins on mount
@@ -190,7 +191,7 @@ const CryptoGraph: React.FC = () => {
     };
     
     // Generate vertical price markers on the right side
-    const priceMarkers = 8;  // Number of price tick markers
+    const priceMarkers = gridLineCount;  // Use the selected value
     const pricePoints = Array.from({ length: priceMarkers }, (_, i) => {
       const value = yMin + (yMax - yMin) * (priceMarkers - 1 - i) / (priceMarkers - 1);
       const y = height - padding.bottom - (value - yMin) * yScale;
@@ -239,6 +240,38 @@ const CryptoGraph: React.FC = () => {
           strokeLinecap="round"
           strokeLinejoin="round"
         />
+        
+        {/* Final point indicator */}
+        {points.length > 0 && (
+          <>
+            {/* Circle at final point */}
+            <circle
+              cx={points[points.length - 1].x}
+              cy={points[points.length - 1].y}
+              r="6"
+              fill="white"
+              stroke="#bb86fc"
+              strokeWidth="2"
+              filter="drop-shadow(0 0 3px rgba(187, 134, 252, 0.8))"
+            />
+            
+            {/* Value label for final point */}
+            <text
+              x={points[points.length - 1].x}
+              y={points[points.length - 1].y - 15}
+              textAnchor="middle"
+              fontSize="14"
+              fontWeight="bold"
+              fill="white"
+              stroke={backgroundColor}
+              strokeWidth="4"
+              strokeLinejoin="round"
+              paintOrder="stroke"
+            >
+              {formatCurrency(sampledPrices[sampledPrices.length - 1][1])}
+            </text>
+          </>
+        )}
         
         {/* Price markers on the right side */}
         {pricePoints.map((point, i) => (
@@ -322,6 +355,20 @@ const CryptoGraph: React.FC = () => {
               onChange={(newValue) => setEndDate(newValue)}
               renderInput={(params) => <TextField {...params} size="small" />}
             />
+            <FormControl size="small" sx={{ minWidth: 120 }}>
+              <InputLabel id="grid-line-select-label">Grid Lines</InputLabel>
+              <Select
+                labelId="grid-line-select-label"
+                id="grid-line-select"
+                value={gridLineCount}
+                label="Grid Lines"
+                onChange={(e) => setGridLineCount(Number(e.target.value))}
+              >
+                {[3, 4, 5, 6, 7, 8, 9, 10].map((count) => (
+                  <MenuItem key={count} value={count}>{count} Lines</MenuItem>
+                ))}
+              </Select>
+            </FormControl>
           </Box>
 
           <Box sx={{ display: 'flex', gap: 2, mb: 3 }}>
