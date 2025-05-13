@@ -101,17 +101,41 @@ const CryptoGraph: React.FC = () => {
   const renderGraph = () => {
     if (!graphData?.prices.length) return null;
     const prices = graphData.prices;
-    const width = 800;
-    const height = 400;
-    const padding = { top: 40, right: 150, bottom: 40, left: 40 };
     
-    const xScale = (width - padding.left - padding.right) / (prices.length - 1);
-    const yMin = Math.min(...prices.map((p) => p[1]));
-    const yMax = Math.max(...prices.map((p) => p[1]));
+    // Mobile-friendly dimensions (taller and narrower)
+    const width = 400;
+    const height = 450;
+    const padding = { top: 60, right: 80, bottom: 40, left: 40 };
+    
+    // Downsample the data points to a consistent number regardless of timescale
+    const downsampleData = (data: [number, number][], targetPoints = 75): [number, number][] => {
+      if (data.length <= targetPoints) return data;
+      
+      const step = data.length / targetPoints;
+      const result: [number, number][] = [];
+      
+      // Always include first and last points for accuracy
+      result.push(data[0]);
+      
+      for (let i = 1; i < targetPoints - 1; i++) {
+        const index = Math.floor(i * step);
+        result.push(data[index]);
+      }
+      
+      result.push(data[data.length - 1]);
+      return result;
+    };
+    
+    // Downsample the data to a consistent number of points
+    const sampledPrices = downsampleData(prices);
+    
+    const xScale = (width - padding.left - padding.right) / (sampledPrices.length - 1);
+    const yMin = Math.min(...sampledPrices.map((p) => p[1]));
+    const yMax = Math.max(...sampledPrices.map((p) => p[1]));
     const yScale = (height - padding.top - padding.bottom) / (yMax - yMin);
     
-    // Generate points array
-    const points = prices.map((price, i) => ({
+    // Generate points array from downsampled data
+    const points = sampledPrices.map((price, i) => ({
       x: padding.left + i * xScale,
       y: height - padding.bottom - (price[1] - yMin) * yScale
     }));
@@ -168,12 +192,22 @@ const CryptoGraph: React.FC = () => {
       }
     };
     
+    // Generate vertical price markers on the right side
+    const priceMarkers = 8;  // Number of price tick markers
+    const pricePoints = Array.from({ length: priceMarkers }, (_, i) => {
+      const value = yMin + (yMax - yMin) * (priceMarkers - 1 - i) / (priceMarkers - 1);
+      const y = height - padding.bottom - (value - yMin) * yScale;
+      return { value, y };
+    });
+    
     return (
       <svg
         ref={svgRef}
         width={width}
         height={height}
         style={{ backgroundColor, borderRadius: '8px' }}
+        viewBox={`0 0 ${width} ${height}`}
+        preserveAspectRatio="xMidYMid meet"
       >
         <defs>
           {/* Gradient for the line */}
@@ -186,22 +220,19 @@ const CryptoGraph: React.FC = () => {
           </linearGradient>
         </defs>
         
-        {/* Vertical grid lines */}
-        {Array.from({ length: gridLines }).map((_, i) => {
-          const x = padding.left + (width - padding.left - padding.right) * i / (gridLines - 1);
-          return (
-            <line 
-              key={`grid-${i}`}
-              x1={x} 
-              y1={padding.top} 
-              x2={x} 
-              y2={height - padding.bottom} 
-              stroke={gridColor} 
-              strokeWidth="1"
-            />
-          );
-        })}
-
+        {/* Horizontal price grid lines */}
+        {pricePoints.map((point, i) => (
+          <line 
+            key={`grid-h-${i}`}
+            x1={padding.left} 
+            y1={point.y} 
+            x2={width - padding.right} 
+            y2={point.y} 
+            stroke={gridColor} 
+            strokeWidth="1"
+          />
+        ))}
+        
         {/* Smooth price line with gradient */}
         <path
           d={smoothPath}
@@ -212,48 +243,68 @@ const CryptoGraph: React.FC = () => {
           strokeLinejoin="round"
         />
         
-        {/* Min/max labels on right side */}
-        <text 
-          x={width - padding.right + 10} 
-          y={padding.top} 
-          textAnchor="start" 
-          fontSize="14" 
-          fill={textColor}
-          fontWeight="bold"
-        >
-          High: {formatCurrency(yMax)}
-        </text>
-        <text 
-          x={width - padding.right + 10} 
-          y={height - padding.bottom} 
-          textAnchor="start" 
-          fontSize="14" 
-          fill={textColor}
-          fontWeight="bold"
-        >
-          Low: {formatCurrency(yMin)}
-        </text>
+        {/* Price markers on the right side */}
+        {pricePoints.map((point, i) => (
+          <text 
+            key={`price-${i}`}
+            x={width - padding.right + 10} 
+            y={point.y + 4} 
+            textAnchor="start" 
+            fontSize="12" 
+            fill={textColor}
+          >
+            {formatCurrency(point.value)}
+          </text>
+        ))}
+        
+        {/* Token name and percentage change - similar to the reference image */}
+        {cryptoName && (
+          <>
+            <text 
+              x={width / 2} 
+              y={padding.top / 2} 
+              textAnchor="middle" 
+              fontSize="22" 
+              fill={textColor}
+              fontWeight="bold"
+            >
+              {cryptoName.toUpperCase()}
+            </text>
+            {prices.length > 1 && (
+              <text 
+                x={width / 2} 
+                y={padding.top / 2 + 30} 
+                textAnchor="middle" 
+                fontSize="20" 
+                fill="#bb86fc"
+                fontWeight="bold"
+              >
+                {((prices[prices.length - 1][1] / prices[0][1] - 1) * 100).toFixed(2)}%
+              </text>
+            )}
+          </>
+        )}
       </svg>
     );
   };
 
   return (
     <LocalizationProvider dateAdapter={AdapterDateFns}>
-      <Box sx={{ maxWidth: 1000, mx: 'auto', p: 3 }}>
+      <Box sx={{ maxWidth: 500, mx: 'auto', p: 3 }}>
         <Paper 
           elevation={isDarkMode ? 2 : 1} 
           sx={{ 
-            p: 4, 
+            p: 3, 
             borderRadius: 2,
             bgcolor: theme.palette.mode === 'dark' ? 'rgba(30, 30, 30, 0.9)' : 'rgba(255, 255, 255, 0.9)',
             backdropFilter: 'blur(10px)'
           }}
         >
-          <Typography variant="h4" gutterBottom fontWeight="500" sx={{ mb: 4 }}>
-            Crypto Price Chart Generator
+          <Typography variant="h4" gutterBottom fontWeight="500" sx={{ mb: 3 }}>
+            Crypto Price Chart
           </Typography>
           
-          <Box sx={{ display: 'flex', gap: 2, mb: 4, flexWrap: 'wrap' }}>
+          <Box sx={{ display: 'flex', gap: 2, mb: 3, flexWrap: 'wrap' }}>
             <TextField
               label="Cryptocurrency Name"
               value={cryptoName}
@@ -276,7 +327,7 @@ const CryptoGraph: React.FC = () => {
             />
           </Box>
 
-          <Box sx={{ display: 'flex', gap: 2, mb: 4 }}>
+          <Box sx={{ display: 'flex', gap: 2, mb: 3 }}>
             <Button
               variant="contained"
               onClick={fetchCryptoData}
@@ -307,7 +358,7 @@ const CryptoGraph: React.FC = () => {
           {error && <Alert severity="error" sx={{ mb: 3 }}>{error}</Alert>}
           
           {suggestions.length > 0 && (
-            <Box sx={{ mb: 4 }}>
+            <Box sx={{ mb: 3 }}>
               <Typography variant="subtitle1">Did you mean:</Typography>
               <List>
                 {suggestions.map((coin) => (
@@ -321,7 +372,20 @@ const CryptoGraph: React.FC = () => {
             </Box>
           )}
 
-          <Box sx={{ display: 'flex', justifyContent: 'center', mb: 2 }}>
+          <Box 
+            sx={{ 
+              display: 'flex', 
+              justifyContent: 'center', 
+              mb: 2,
+              maxWidth: '100%',
+              overflow: 'hidden',
+              '& svg': {
+                maxWidth: '100%',
+                height: 'auto',
+                maxHeight: '70vh' // Limit height on larger screens
+              }
+            }}
+          >
             {renderGraph()}
           </Box>
         </Paper>
