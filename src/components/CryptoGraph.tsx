@@ -175,9 +175,6 @@ const CryptoGraph: React.FC = () => {
     const backgroundColor = isDarkMode ? '#121212' : '#f5f5f5';
     const textColor = isDarkMode ? 'rgba(255, 255, 255, 0.7)' : 'rgba(0, 0, 0, 0.7)';
     const gridColor = isDarkMode ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)';
-
-    // Number of vertical grid lines
-    const gridLines = 10;
     
     // Format currency for large numbers
     const formatCurrency = (value: number) => {
